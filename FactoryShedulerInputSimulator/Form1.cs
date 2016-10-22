@@ -102,8 +102,8 @@ namespace FactoryShedulerInputSimulator
                 case "Nabíjecí stanice":
                     switch (status)
                     {
-                        case "Obsazeno": return 'F';
-                        case "Volno": return 'T';
+                        case "Volno": return 'F';
+                        case "Obsazeno": return 'T';
                         default: return 'X';
                     }
                 case "Konzumní stanice":
