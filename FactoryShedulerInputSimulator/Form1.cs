@@ -15,45 +15,58 @@ namespace FactoryShedulerInputSimulator
     public partial class Form1 : Form
     {
         int lastAddress = 0;
+        Dictionary<int, Device> devices = new Dictionary<int, Device>();
 
         public Form1()
         {
             InitializeComponent();
 
-            if (!checkConnection())
-            {
-                label1.Text = "Připojení selhalo.";
-            }
-            else {
-                setDefaultMapPoints();
-            }
+            setDefaultMapPoints();
+
+            startServer();
         }
 
         /// <summary>
-        /// Zkontroluje, zda se lze připojit k aplikaci Factory sheduler na localhostu přes UDP na portu 5555
+        /// Nastartuje server pro požadavky na stav zařízení
         /// </summary>
-        /// <returns>true pokud ano</returns>
-        public bool checkConnection()
+        public void startServer() {
+            IPEndPoint ipep = new IPEndPoint(IPAddress.Any, 6666);
+            UdpClient newsock = new UdpClient(ipep);
+
+            BackgroundWorker bw = new BackgroundWorker();
+
+            bw.DoWork += new DoWorkEventHandler(delegate (object o, DoWorkEventArgs args)
+            {
+                while (true)
+                {
+                    readRequest(newsock);
+                }
+            });
+
+            bw.RunWorkerAsync();
+        }
+
+        /// <summary>
+        /// Přečte jeden UDP request
+        /// </summary>
+        private void readRequest(UdpClient sock)
         {
-            try
+            IPEndPoint sender = new IPEndPoint(IPAddress.Any, 0);
+            byte[] data = sock.Receive(ref sender);
+            if (data.Length == 1)
             {
-                UdpClient udpClient = new UdpClient();
-                IPEndPoint appEndPoint = new IPEndPoint(IPAddress.Parse("127.0.0.1"), 5555);
-                udpClient.Connect(appEndPoint);
+                int address = data[0];
 
-                byte[] sendBytes = new byte[] { (byte)0, (byte)0 , (byte)0 };
+                byte[] dataBack;
+                if (devices.ContainsKey(address))
+                {
+                    dataBack = new byte[] { (byte)address, (byte)devices[address].type, (byte)devices[address].status };
+                }
+                else {
+                    dataBack = new byte[] { (byte)address };
+                }
 
-                udpClient.Send(sendBytes, sendBytes.Length);
-
-                //Blocks until a message returns on this socket from a remote host.
-                Byte[] receiveBytes = udpClient.Receive(ref appEndPoint);
-
-                udpClient.Close();
-                return true;
-            }
-            catch (Exception e)
-            {
-                return false;
+                sock.Send(dataBack, dataBack.Length, sender);
             }
         }
 
@@ -81,6 +94,8 @@ namespace FactoryShedulerInputSimulator
                 label1.Text = "Připojení selhalo.";
             }
         }
+
+        
 
         private char getStatusChar(string status, string type) {
             switch (type)
@@ -160,7 +175,7 @@ namespace FactoryShedulerInputSimulator
 
         private void addChargePlace()
         {
-            addType("Nabíjecí stanice", ++lastAddress, 'F', new object[] { "Obsazeno", "Volno" });
+            addType("Nabíjecí stanice", ++lastAddress, 'F', new object[] { "Volno" , "Obsazeno" });
         }
 
         private void addConsumerPlace()
@@ -170,6 +185,7 @@ namespace FactoryShedulerInputSimulator
 
         private void addType(string type, int address, char status, object[] statusValues)
         {
+            devices.Add(address, new Device(status, getTypeChar(type)));
             Panel panel = new Panel();
             panel.BackColor = SystemColors.ControlDark;
             panel.BorderStyle = BorderStyle.FixedSingle;
@@ -182,7 +198,8 @@ namespace FactoryShedulerInputSimulator
             comboBox.SelectedValueChanged += new EventHandler(delegate (object sender, EventArgs e)
             {
                 sendStatus(type, address, getStatusChar(((ComboBox)sender).Text, type));
-            });
+                devices[address].status = getStatusChar(((ComboBox)sender).Text, type);
+        });
 
             Label labelType = new Label();
             labelType.AutoSize = true;
